@@ -1,4 +1,8 @@
 import java.io.*;
+import org.python.core.PyObject;
+import org.python.core.PyInteger;
+import org.python.core.PyException;
+import org.python.util.PythonInterpreter;
 
 
 public class PythonTest {
@@ -8,47 +12,10 @@ public class PythonTest {
 	 */
 	public static void main(String[] args) {
 		String s = null;
+		
+		PythonInterpreter interpreter = new PythonInterpreter();
 		 
-        try {
-             
-        	
-        	String workingdirectory = System.getProperty("user.dir");
-        	System.out.println(workingdirectory);
-        	
-        	PrintWriter writer = new PrintWriter(workingdirectory + "/test.py", "UTF-8");
-        	writer.println("print \"hello world\"");
-        	writer.flush();
-        	
-        	String command = "python " + workingdirectory + "/test.py";
-        	
-        	// using the Runtime exec method:
-            Process p = Runtime.getRuntime().exec(command);
-             
-            BufferedReader stdInput = new BufferedReader(new
-                 InputStreamReader(p.getInputStream()));
- 
-            BufferedReader stdError = new BufferedReader(new
-                 InputStreamReader(p.getErrorStream()));
- 
-            // read the output from the command
-            System.out.println("Here is the standard output of the command:\n");
-            while ((s = stdInput.readLine()) != null) {
-                System.out.println(s);
-            }
-             
-            // read any errors from the attempted command
-            System.out.println("Here is the standard error of the command (if any):\n");
-            while ((s = stdError.readLine()) != null) {
-                System.out.println(s);
-            }
-             
-            System.exit(0);
-        }
-        catch (IOException e) {
-            System.out.println("exception happened - here's what I know: ");
-            e.printStackTrace();
-            System.exit(-1);
-        }
+		interpreter.exec("print \"hello world\"");
 	}
 
 }
