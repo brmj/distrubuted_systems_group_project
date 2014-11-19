@@ -14,8 +14,8 @@ public class PythonTest {
 		String s = null;
 		
 		PythonInterpreter interpreter = new PythonInterpreter();
-		 
-		interpreter.exec("print \"hello world\"");
+		interpreter.set("foo", "Hello World");
+		interpreter.exec("print foo");
 	}
 
 }
