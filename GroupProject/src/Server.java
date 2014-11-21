@@ -32,7 +32,7 @@ public class Server implements Runnable {
 		System.out.println(this.jobId);
 	}
 	//just for definition so that Server can deserialize this object
-	public static class Assigner {
+	private static class Assigner {
 		
 	}
 	static class Node {
