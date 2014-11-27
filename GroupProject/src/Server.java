@@ -1,11 +1,19 @@
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.List;
 
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -81,7 +89,7 @@ public class Server implements Runnable {
 						
 						String message = new String(delivery.getBody());
 						
-						System.out.println(message);
+						//System.out.println(message);
 						
 					}
 
@@ -303,6 +311,97 @@ public class Server implements Runnable {
 			e.printStackTrace();
 		}									
 	}
+	
+	public void distributeJob(Connection connection, Channel channel) {
+		synchronized(Server.nodeList) {
+			int numberOfNodes = 0;
+			
+			for (int count=0; count < nodeList.size(); count++) {
+				if(nodeList.get(count).isFree) {
+					numberOfNodes++;
+				}
+				
+			}
+			
+			System.out.println("number of nodes " + numberOfNodes);
+			
+			List<String> linesInputFile = null;
+			try {
+				linesInputFile = Files.readAllLines(Paths.get("input" + this.jobId), Charset.defaultCharset());				
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			int numberOfLines = linesInputFile.size();			
+			int linesPerNode = numberOfLines / numberOfNodes;
+			int linesCounter = 0;
+			int nodeCounter = 0;
+			
+			System.out.println("number of lines " + numberOfLines + " linesPerNode " + linesPerNode);
+			FileInputStream readInputFile = null;
+			BufferedReader bufferReader = null;
+			String inputLine = null;
+			try {
+				readInputFile = new FileInputStream(Paths.get("input" + this.jobId).toAbsolutePath().toString());
+				bufferReader = new BufferedReader(new InputStreamReader(readInputFile));
+				
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			//create input files for nodes
+			
+			for (int count=0; count < nodeList.size(); count++) {
+				if(nodeList.get(count).isFree) {
+					if ( nodeCounter == (numberOfNodes - 1)) {
+						//add all remaining lines to last available node
+						
+						try {
+							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath().toString() );
+							
+							while((inputLine = bufferReader.readLine()) != null ) {
+								outputLine.println(inputLine);
+							}
+							
+							outputLine.close();
+							
+						} catch (FileNotFoundException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+						
+					}
+					
+					else {
+						try {
+							
+							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath().toString() );
+							while (linesCounter < linesPerNode) {									
+								if ( (inputLine = bufferReader.readLine()) != null ) {
+								
+									outputLine.println(inputLine);
+									linesCounter++;
+								}
+								
+							}
+							outputLine.close();
+							linesCounter = 0;
+							nodeCounter++;
+							
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}						
+					}
+				}
+			}
+		}
+	}
+	
 	@Override
 	public void run() {
 		ConnectionFactory factory = new ConnectionFactory();
@@ -319,6 +418,7 @@ public class Server implements Runnable {
 		}
 		
 		getMapReduceInput(connection, channel);
+		distributeJob(connection, channel);
 			
 	}
 	
