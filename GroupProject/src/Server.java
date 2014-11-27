@@ -42,11 +42,26 @@ public class Server implements Runnable {
 		this.jobInProgress = false;
 		System.out.println(this.jobId);
 	}
-	//just for definition so that Server can deserialize this object
-	private static class Assigner {
+	
+	/**
+	 * Stores incoming results from nodes
+	 * @author vinayak
+	 *
+	 */
+	static class Result {
+		String jobId;
+		byte[] result;
 		
+		public Result(String id, byte[] data) {
+			this.jobId = id;
+			this.result = data;
+		}
 	}
+	
+	static ArrayList<Result> resultsList = new ArrayList<Result>();
+	
 	static class Node implements Runnable {
+		String jobId;
 		String nodeId;
 		String queueFromServer;
 		String queueFromNode;
@@ -89,7 +104,22 @@ public class Server implements Runnable {
 						
 						String message = new String(delivery.getBody());
 						
+						//if message is other than alive 
+						//start writing message in queue so that it can be retrieved
+						
 						//System.out.println(message);
+						
+						if(message.equals("result")) {	
+							
+							delivery = consumer.nextDelivery(60000);
+							synchronized(resultsList) {
+								Result result = new Result(this.jobId, delivery.getBody());
+								resultsList.add(result);								
+							}
+							
+							this.isFree = true;
+
+						}
 						
 					}
 
@@ -366,6 +396,19 @@ public class Server implements Runnable {
 							
 							outputLine.close();
 							
+							
+							//send map function and input data
+							
+							nodeList.get(count).isFree = false;
+							nodeList.get(count).jobId = this.jobId;
+							
+							String message = "map";
+						    channel.queueDeclare(nodeList.get(count).queueFromServer, false, false, false, null);
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, message.getBytes());
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("map" + this.jobId).toAbsolutePath()));						    
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath()));
+						    
+							
 						} catch (FileNotFoundException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -392,6 +435,17 @@ public class Server implements Runnable {
 							linesCounter = 0;
 							nodeCounter++;
 							
+							//send map function and input 
+							nodeList.get(count).isFree = false;
+							
+						    nodeList.get(count).jobId = this.jobId;
+							
+							String message = "map";
+						    channel.queueDeclare(nodeList.get(count).queueFromServer, false, false, false, null);
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, message.getBytes());
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("map" + this.jobId).toAbsolutePath()));
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath()));							
+							
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -402,6 +456,63 @@ public class Server implements Runnable {
 		}
 	}
 	
+	public void reduceOutput( Connection connection, Channel channel ) {
+		synchronized(resultsList) {
+			while(true) {
+				if(resultsList.size() > 1) {
+					int numberOfResults = resultsList.size();
+					
+					for(int count = 0; count < numberOfResults; count = count + 2 ) {
+						synchronized(nodeList) {
+							for(int i = 0; i < nodeList.size(); i++ ) {
+								if(nodeList.get(i).isFree) {
+									Result firstResult = resultsList.get(count);
+									Result secondResult = resultsList.get(count + 1);
+									
+									//remove results from queue
+									resultsList.remove(count);
+									resultsList.remove(count + 1);
+									
+									String message = "reduce";
+								    try {
+										channel.queueDeclare(nodeList.get(i).queueFromServer, false, false, false, null);
+									    channel.basicPublish("", nodeList.get(i).queueFromServer, null, message.getBytes());
+									    channel.basicPublish("", nodeList.get(i).queueFromServer, null, Files.readAllBytes(Paths.get("reduce" + this.jobId).toAbsolutePath()));
+									    channel.basicPublish("", nodeList.get(i).queueFromServer, null, firstResult.result);
+									    channel.basicPublish("", nodeList.get(i).queueFromServer, null, secondResult.result);
+									} catch (IOException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+
+								    
+									
+								}
+							}
+						}
+					}
+				}
+				int nodeCount = 0;
+				for(int count = 0; count < nodeList.size(); count++ ) {
+					if (nodeList.get(count).isFree) {
+						nodeCount++;
+					}
+				}
+				
+				if(nodeCount == nodeList.size() && resultsList.size() == 1) {
+					String message = "reduce";
+				    try {
+						channel.queueDeclare(this.queueFromServer, false, false, false, null);
+					    channel.basicPublish("", this.queueFromServer, null, message.getBytes());
+					    channel.basicPublish("", this.queueFromServer, null, resultsList.get(0).result);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+	}
 	@Override
 	public void run() {
 		ConnectionFactory factory = new ConnectionFactory();
@@ -419,7 +530,7 @@ public class Server implements Runnable {
 		
 		getMapReduceInput(connection, channel);
 		distributeJob(connection, channel);
-			
+		reduceOutput(connection, channel);
 	}
 	
 	public static void deleteNode(Node thisNode) {
