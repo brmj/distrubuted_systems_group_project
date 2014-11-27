@@ -1,7 +1,10 @@
 import java.io.ByteArrayInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectInputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 
 import com.rabbitmq.client.Connection;
@@ -124,31 +127,6 @@ public class Server implements Runnable {
 	static String queueForAssignerRequest = "assignerQueue";
 	static String queueForNodeRequest = "nodeQueue";
 	static String serverHost;
-	/**
-	 * deserialize incoming assigner object
-	 * @param data
-	 * @return
-	 */
-	public static Assigner deserializeAssignerObject (byte[] data) {
-		Assigner temp = null;
-		
-        ByteArrayInputStream bis = new ByteArrayInputStream(data);
-        ObjectInput in;
-        
-		try {
-			in = new ObjectInputStream(bis);
-			temp = (Assigner) in.readObject();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-        
-        
-        return temp;
-	}
 	
 	public static void main (String[] args) {
 		final ArrayList<Server> jobRequests = new ArrayList<Server>();
@@ -253,12 +231,83 @@ public class Server implements Runnable {
 
 		
 	}
+	
+	public void getMapReduceInput(Connection connection, Channel channel) {
+		try {
+			String message = "";
+			
+			channel.queueDeclare(this.queueFromAssigner, false, false, false, null);
+			
+			QueueingConsumer consumer = new QueueingConsumer(channel);
+			channel.basicConsume(this.queueFromAssigner, true, consumer);
+			
+			
+			try {
 
+				//first read map keyword
+				QueueingConsumer.Delivery delivery = consumer.nextDelivery();					
+				message = new String(delivery.getBody());
+				
+				//write map function with job id
+				if(message.equals("map")) {
+					delivery = consumer.nextDelivery();
+					Path mapPath = Paths.get("map" + this.jobId);
+					FileOutputStream mapFileOutput = new FileOutputStream(mapPath.toAbsolutePath().toString());
+					mapFileOutput.write(delivery.getBody());
+					mapFileOutput.close();						
+				}
+				
+				//for reduce function
+				delivery = consumer.nextDelivery();					
+				message = new String(delivery.getBody());
+				
+				//write reduce function with job id
+				if(message.equals("reduce")) {
+					delivery = consumer.nextDelivery();
+					Path reducePath = Paths.get("reduce" + this.jobId);
+					FileOutputStream reduceFileOutput = new FileOutputStream(reducePath.toAbsolutePath().toString());
+					reduceFileOutput.write(delivery.getBody());
+					reduceFileOutput.close();						
+				}
+				
+				//for reduce function
+				delivery = consumer.nextDelivery();					
+				message = new String(delivery.getBody());
+				
+				//write reduce function with job id
+				if(message.equals("input")) {
+					delivery = consumer.nextDelivery();
+					Path inputPath = Paths.get("input" + this.jobId);
+					FileOutputStream inputFileOutput = new FileOutputStream(inputPath.toAbsolutePath().toString());
+					inputFileOutput.write(delivery.getBody());
+					inputFileOutput.close();						
+				}
+				//output is actually job request from assigner
+				//for now it will be considered as string for testing purpose
+			} catch (ShutdownSignalException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (ConsumerCancelledException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (NullPointerException e) {
+				System.out.println("no message");
+			}
+			
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}									
+	}
 	@Override
 	public void run() {
 		ConnectionFactory factory = new ConnectionFactory();
 		factory.setHost(serverHost);
-		Connection connection;
+		Connection connection = null;
 		Channel channel = null;
 		
 		try {
@@ -269,47 +318,8 @@ public class Server implements Runnable {
 			e1.printStackTrace();
 		}
 		
-
-		if(!this.jobRequested) {
-
-			try {
-
-				channel.queueDeclare(this.queueFromAssigner, false, false, false, null);
-				
-				QueueingConsumer consumer = new QueueingConsumer(channel);
-				channel.basicConsume(this.queueFromAssigner, true, consumer);
-				
-				
-				try {
-					while(true) {
-						QueueingConsumer.Delivery delivery = consumer.nextDelivery();
-						
-						String message = new String(delivery.getBody());
-						System.out.println(message);										
-					}
-
-					//output is actually job request from assigner
-					//for now it will be considered as string for testing purpose
-				} catch (ShutdownSignalException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (ConsumerCancelledException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (NullPointerException e) {
-					System.out.println("no message");
-				}
-				
-				
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}							
+		getMapReduceInput(connection, channel);
 			
-		}		
 	}
 	
 	public static void deleteNode(Node thisNode) {
