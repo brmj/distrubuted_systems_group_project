@@ -35,19 +35,86 @@ public class Server implements Runnable {
 	private static class Assigner {
 		
 	}
-	static class Node {
+	static class Node implements Runnable {
 		String nodeId;
 		String queueFromServer;
 		String queueFromNode;
 		boolean isFree;
 		boolean isFailed;
 		
+		
 		Node(String nodeQueue) {
+			this.nodeId = nodeQueue;
 			this.queueFromNode = "FN" + nodeQueue;
 			this.queueFromServer = "FS" + nodeQueue;
 			this.isFree = true;
 			this.isFailed = false;
 		}
+
+		public void listenOnNodeQueue() {
+			ConnectionFactory factory = new ConnectionFactory();
+			factory.setHost(serverHost);
+			Connection connection;
+			Channel channel = null;
+			
+			try {
+				connection = factory.newConnection();
+				channel = connection.createChannel();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			try {
+
+				channel.queueDeclare(this.queueFromNode, false, false, false, null);
+				
+				QueueingConsumer consumer = new QueueingConsumer(channel);
+				channel.basicConsume(this.queueFromNode, true, consumer);
+				
+				
+				try {
+					while(true) {
+						QueueingConsumer.Delivery delivery = consumer.nextDelivery(5000);
+						
+						String message = new String(delivery.getBody());
+						
+						System.out.println(message);
+						
+					}
+
+					//output is actually job request from assigner
+					//for now it will be considered as string for testing purpose
+				} catch (ShutdownSignalException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (ConsumerCancelledException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (NullPointerException e) {
+					this.isFailed = true;
+					System.out.println("node failure");
+					Server.deleteNode(this);
+				}
+				
+				
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}							
+		}
+		
+		@Override
+		public void run() {
+			//listens on incoming messages from node
+			//including polling messages and output messages
+			
+			this.listenOnNodeQueue();
+		}
+		
+		
 	}
 	
 	static ArrayList<Node> nodeList;
@@ -119,6 +186,7 @@ public class Server implements Runnable {
 							
 							Thread threadAssigner = new Thread(newJob);
 							threadAssigner.start();
+							
 						} catch (ShutdownSignalException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -161,7 +229,9 @@ public class Server implements Runnable {
 							
 							Node newNode = new Node(nodeQueue);
 							nodeList.add(newNode);
-							
+							System.out.println("created a new node " + nodeQueue);
+							Thread listenOnNode = new Thread(newNode);
+							listenOnNode.start();
 						} catch (ShutdownSignalException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -240,5 +310,10 @@ public class Server implements Runnable {
 			}							
 			
 		}		
+	}
+	
+	public static void deleteNode(Node thisNode) {
+		Server.nodeList.remove(thisNode);
+		System.out.println("node deleted");
 	}
 }
