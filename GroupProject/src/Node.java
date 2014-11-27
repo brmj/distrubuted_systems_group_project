@@ -19,10 +19,6 @@ public class Node implements Runnable {
 	String initialConnectionQueue;
 	String ipAddressRabbitMqServer;
 	
-	class InputtoServer {
-		
-	}
-	
 	Node(String ipAddress) {
 		//ip address of rabbitmq server
 		this.ipAddressRabbitMqServer = ipAddress;
