@@ -60,8 +60,8 @@ public class PythonTest {
 		i2.add(7);
 		i2.add(2);
 		
-		genTestFile("sortmap", "i1.dat", i1);
-		genTestFile("sortmap", "i2.dat", i2);
+		//genTestFile("sortmap", "i1.dat", i1);
+	//	genTestFile("sortmap", "i2.dat", i2);
 		
 		doMap("sortmap", "i1.dat", "o1.dat");
 		doMap("sortmap", "i2.dat", "o2.dat");

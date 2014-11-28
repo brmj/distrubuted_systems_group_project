@@ -145,10 +145,17 @@ public class Assigner {
 				
 			//	Path current = Paths.get("");
 			//	String outputFileString = current.toAbsolutePath().toString() + "/output.txt";
+				message = new String(delivery.getBody());
 				
-				FileOutputStream outputFile = new FileOutputStream(myObject.outputPath);				
-				outputFile.write(delivery.getBody());
-				outputFile.close();
+				if(message.equals("result")) {
+					delivery = consumer.nextDelivery();
+					FileOutputStream outputFile = new FileOutputStream(myObject.outputPath);				
+					outputFile.write(delivery.getBody());
+					outputFile.close();					
+				}
+
+				
+				System.out.println("Output has been received!");
 				
 			} catch (ShutdownSignalException e) {
 				// TODO Auto-generated catch block
