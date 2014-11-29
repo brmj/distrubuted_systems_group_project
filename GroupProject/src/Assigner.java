@@ -16,7 +16,12 @@ import com.rabbitmq.client.ConsumerCancelledException;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.ShutdownSignalException;
 
-
+/**
+ * Assigner Class
+ * 
+ * @author Ben, Bhakti, and Vinayak
+ *
+ */
 public class Assigner {
 	
 	String queueFromAssigner;
@@ -30,10 +35,14 @@ public class Assigner {
 	String inputDataPath;
 	String outputPath;
 	
-	class InputtoServer {
-		
-	}
-	
+	/**
+	 * 
+	 * @param ipAddress
+	 * @param map
+	 * @param reduce
+	 * @param input
+	 * @param output
+	 */
 	Assigner(String ipAddress, String map, String reduce, String input, String output) {
 		//ip address of rabbitmq server
 		this.ipAddressRabbitMqServer = ipAddress;
@@ -56,7 +65,7 @@ public class Assigner {
 		this.mapPath = map;
 		this.reducePath = reduce;
 		this.inputDataPath = input;
-		this.outputPath = output;
+		this.outputPath = output + Integer.toString(this.queueFromAssigner.hashCode());
 	}
 	/**
 	 * This class contains main.
@@ -66,8 +75,13 @@ public class Assigner {
 
 	public static void main(String[] args) {
 		
+		if (args[0].equals(null) || args[1].equals(null) || args[2].equals(null) || args[3].equals(null) || args[4].equals(null)) {
+			System.out.println("Invalid arguments to program. Exiting!");
+			System.exit(1);
+		}
 		Assigner myObject = new Assigner(args[0], args[1], args[2], args[3], args[4]);
-		System.out.println("connecting on "+myObject.ipAddressRabbitMqServer);
+		
+		System.out.println("creating a new Job with Id : " + myObject.jobId);
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost(myObject.ipAddressRabbitMqServer);
 	    Connection connection = null;
@@ -83,7 +97,7 @@ public class Assigner {
 
 		    channel.queueDeclare(myObject.initialConnectionQueue, false, false, false, null);
 		    channel.basicPublish("", myObject.initialConnectionQueue, null, myObject.jobId.getBytes());
-		    System.out.println(myObject.jobId);
+		    //System.out.println(myObject.jobId);
 		    channel.close();
 		    connection.close();
 		} catch (IOException e) {
@@ -115,20 +129,26 @@ public class Assigner {
   			
 		    channel.queueDeclare(myObject.queueFromAssigner, false, false, false, null);
 		    
+		    System.out.println("Passing Map method to Server");
 		    //pass map function
 		    String message = "map";
 		    channel.basicPublish("", myObject.queueFromAssigner, null, message.getBytes());
 		    channel.basicPublish("", myObject.queueFromAssigner, null, Files.readAllBytes(mapFilePath));
+		    System.out.println("Map method has been passed to Server");
 		    
+		    System.out.println("Passing Reduce method to Server");
 		    //pass reduce function
 		    message = "reduce";
 		    channel.basicPublish("", myObject.queueFromAssigner, null, message.getBytes());
 		    channel.basicPublish("", myObject.queueFromAssigner, null, Files.readAllBytes(reduceFilePath));
-
+		    System.out.println("Reduce method has been passed to Server");
+		    
+		    System.out.println("Passing Input Data to Server");
 		    //pass input data
 		    message = "input";
 		    channel.basicPublish("", myObject.queueFromAssigner, null, message.getBytes());
 		    channel.basicPublish("", myObject.queueFromAssigner, null, Files.readAllBytes(inputFilePath));
+		    System.out.println("Input data has been passed to Server");
 		    
 		    //consume from server queue
 			channel.queueDeclare(myObject.queueFromServer, false, false, false, null);
@@ -155,7 +175,7 @@ public class Assigner {
 				}
 
 				
-				System.out.println("Output has been received!");
+				System.out.println("Output from Server has been received at " + myObject.outputPath.toString());
 				
 			} catch (ShutdownSignalException e) {
 				// TODO Auto-generated catch block

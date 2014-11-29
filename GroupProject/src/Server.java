@@ -22,7 +22,11 @@ import com.rabbitmq.client.ConsumerCancelledException;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.ShutdownSignalException;
 
-
+/**
+ * 
+ * @author Ben, Bhakti, and Vinayak
+ *
+ */
 public class Server implements Runnable {
 	String jobId;
 	String queueFromAssigner;
@@ -32,6 +36,10 @@ public class Server implements Runnable {
 	boolean jobFinished;
 	boolean jobFailed;
 
+	/**
+	 * 
+	 * @param assignerQueue
+	 */
 	Server (String assignerQueue) {
 		this.jobId = assignerQueue;
 		this.queueFromServer = "FS" + assignerQueue;
@@ -40,12 +48,12 @@ public class Server implements Runnable {
 		this.jobFailed = false;
 		this.jobFinished = false;
 		this.jobInProgress = false;
-		System.out.println(this.jobId);
+		//System.out.println(this.jobId);
 	}
 	
 	/**
 	 * Stores incoming results from nodes
-	 * @author vinayak
+	 * @author Ben, Bhakti, and Vinayak
 	 *
 	 */
 	static class Result {
@@ -60,6 +68,11 @@ public class Server implements Runnable {
 	
 	static ArrayList<Result> resultsList = new ArrayList<Result>();
 	
+	/**
+	 * 
+	 * @author Ben, Bhakti, and Vinayak
+	 *
+	 */
 	static class Node implements Runnable {
 		String jobId;
 		String nodeId;
@@ -68,15 +81,21 @@ public class Server implements Runnable {
 		boolean isFree;
 		boolean isFailed;
 		
-		
+		/**
+		 * 
+		 * @param nodeQueue
+		 */
 		Node(String nodeQueue) {
 			this.nodeId = nodeQueue;
 			this.queueFromNode = "FN" + nodeQueue;
 			this.queueFromServer = "FS" + nodeQueue;
 			this.isFree = true;
 			this.isFailed = false;
+			this.jobId = "none";
 		}
-
+		/**
+		 * 
+		 */
 		public void listenOnNodeQueue() {
 			ConnectionFactory factory = new ConnectionFactory();
 			factory.setHost(serverHost);
@@ -111,7 +130,7 @@ public class Server implements Runnable {
 						
 						if(message.equals("result")) {	
 							
-							System.out.println("result received by server");
+							System.out.println("Partial result has been received for Job Id : " + this.jobId );
 							
 							while (true) {
 								delivery = consumer.nextDelivery(60000);
@@ -125,9 +144,9 @@ public class Server implements Runnable {
 							synchronized(resultsList) {
 								Result result = new Result(this.jobId, message.getBytes());
 								resultsList.add(result);	
-								System.out.println("size " + resultsList.size());
+								//System.out.println("size " + resultsList.size());
 							}
-							
+							this.jobId = "none";
 							this.isFree = true;
 
 						}
@@ -147,7 +166,7 @@ public class Server implements Runnable {
 					e.printStackTrace();
 				} catch (NullPointerException e) {
 					this.isFailed = true;
-					System.out.println("node failure");
+					System.out.println("node failure has occured for Node Id : " + this.nodeId);
 					Server.deleteNode(this);
 				}
 				
@@ -157,7 +176,9 @@ public class Server implements Runnable {
 				e.printStackTrace();
 			}							
 		}
-		
+		/**
+		 * 
+		 */
 		@Override
 		public void run() {
 			//listens on incoming messages from node
@@ -176,12 +197,18 @@ public class Server implements Runnable {
 	static String queueForAssignerRequest = "assignerQueue";
 	static String queueForNodeRequest = "nodeQueue";
 	static String serverHost;
-	
+	/**
+	 * 
+	 * @param args
+	 */
 	public static void main (String[] args) {
 		final ArrayList<Server> jobRequests = new ArrayList<Server>();
 		nodeList = new ArrayList<Node>();
 		
 		//assign rabbitMq Server
+		if(args[0].equals(null)) {
+			System.exit(1);
+		}
 		serverHost = args[0];
 		
 		//Thread to listen requests from Assigner
@@ -205,7 +232,7 @@ public class Server implements Runnable {
 							QueueingConsumer.Delivery delivery = consumer.nextDelivery();
 							
 							String assignerQueue = new String(delivery.getBody());
-							System.out.println("got assignerQueue" + assignerQueue);
+							System.out.println("New Job Request with Job Id : " + assignerQueue);
 							Server newJob = new Server(assignerQueue);
 							
 							//add new job request to Server
@@ -256,7 +283,7 @@ public class Server implements Runnable {
 							
 							Node newNode = new Node(nodeQueue);
 							nodeList.add(newNode);
-							System.out.println("created a new node " + nodeQueue);
+							System.out.println("New Node has joined the system with Node Id : " + nodeQueue);
 							Thread listenOnNode = new Thread(newNode);
 							listenOnNode.start();
 						} catch (ShutdownSignalException e) {
@@ -280,7 +307,11 @@ public class Server implements Runnable {
 
 		
 	}
-	
+	/**
+	 * get map reduce and input file from assigner
+	 * @param connection
+	 * @param channel
+	 */
 	public void getMapReduceInput(Connection connection, Channel channel) {
 		try {
 			String message = "";
@@ -299,11 +330,13 @@ public class Server implements Runnable {
 				
 				//write map function with job id
 				if(message.equals("map")) {
+					System.out.println("Receiving Map Method for Job Id : " + this.jobId);
 					delivery = consumer.nextDelivery();
 					Path mapPath = Paths.get("map" + this.jobId);
 					FileOutputStream mapFileOutput = new FileOutputStream(mapPath.toAbsolutePath().toString());
 					mapFileOutput.write(delivery.getBody());
 					mapFileOutput.close();						
+					System.out.println("Map method has been received for Job Id : " + this.jobId);
 				}
 				
 				//for reduce function
@@ -312,11 +345,13 @@ public class Server implements Runnable {
 				
 				//write reduce function with job id
 				if(message.equals("reduce")) {
+					System.out.println("Receiving Reduce Method for Job Id : " + this.jobId);
 					delivery = consumer.nextDelivery();
 					Path reducePath = Paths.get("reduce" + this.jobId);
 					FileOutputStream reduceFileOutput = new FileOutputStream(reducePath.toAbsolutePath().toString());
 					reduceFileOutput.write(delivery.getBody());
 					reduceFileOutput.close();						
+					System.out.println("Reduce method has been received for Job Id : " + this.jobId);
 				}
 				
 				//for reduce function
@@ -325,11 +360,13 @@ public class Server implements Runnable {
 				
 				//write reduce function with job id
 				if(message.equals("input")) {
+					System.out.println("Receiving input data for Job Id : " + this.jobId);
 					delivery = consumer.nextDelivery();
 					Path inputPath = Paths.get("input" + this.jobId);
 					FileOutputStream inputFileOutput = new FileOutputStream(inputPath.toAbsolutePath().toString());
 					inputFileOutput.write(delivery.getBody());
-					inputFileOutput.close();						
+					inputFileOutput.close();				
+					System.out.println("Input data has been received for Job Id : " + this.jobId);
 				}
 				//output is actually job request from assigner
 				//for now it will be considered as string for testing purpose
@@ -343,7 +380,7 @@ public class Server implements Runnable {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (NullPointerException e) {
-				System.out.println("no message");
+				//System.out.println("no message");
 			}
 			
 			
@@ -352,19 +389,32 @@ public class Server implements Runnable {
 			e.printStackTrace();
 		}									
 	}
-	
+	/**
+	 * 
+	 * @param connection
+	 * @param channel
+	 */
 	public void distributeJob(Connection connection, Channel channel) {
 		synchronized(Server.nodeList) {
 			int numberOfNodes = 0;
 			
-			for (int count=0; count < nodeList.size(); count++) {
-				if(nodeList.get(count).isFree) {
-					numberOfNodes++;
+			while(numberOfNodes < 1) {
+				for (int count=0; count < nodeList.size(); count++) {
+					if(nodeList.get(count).isFree) {
+						numberOfNodes++;
+					}
+					
 				}
-				
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 			
-			System.out.println("number of nodes " + numberOfNodes);
+			
+			//System.out.println("number of nodes " + numberOfNodes);
 			
 			List<String> linesInputFile = null;
 			try {
@@ -379,7 +429,7 @@ public class Server implements Runnable {
 			int linesCounter = 0;
 			int nodeCounter = 0;
 			
-			System.out.println("number of lines " + numberOfLines + " linesPerNode " + linesPerNode);
+		//	System.out.println("number of lines " + numberOfLines + " linesPerNode " + linesPerNode);
 			FileInputStream readInputFile = null;
 			BufferedReader bufferReader = null;
 			String inputLine = null;
@@ -392,6 +442,7 @@ public class Server implements Runnable {
 				e.printStackTrace();
 			}
 			//create input files for nodes
+			System.out.println("Splitting & distribution of input data begins for Job Id : " + this.jobId);
 			
 			for (int count=0; count < nodeList.size(); count++) {
 				if(nodeList.get(count).isFree) {
@@ -399,7 +450,7 @@ public class Server implements Runnable {
 						//add all remaining lines to last available node
 						
 						try {
-							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath().toString() );
+							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode"  + this.jobId + nodeList.get(count).nodeId).toAbsolutePath().toString() );
 							
 							while((inputLine = bufferReader.readLine()) != null ) {
 								outputLine.println(inputLine);
@@ -416,12 +467,12 @@ public class Server implements Runnable {
 							String message = "map";
 						    channel.queueDeclare(nodeList.get(count).queueFromServer, false, false, false, null);
 						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, message.getBytes());
-						    System.out.println(Paths.get("map" + this.jobId).toAbsolutePath());
-						    System.out.println(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath());
+						   // System.out.println(Paths.get("map" + this.jobId).toAbsolutePath());
+						   // System.out.println(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath());
 						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("map" + this.jobId).toAbsolutePath()));						    
-						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath()));
-						    
-							
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + this.jobId + nodeList.get(count).nodeId).toAbsolutePath()));
+						    System.out.println("Node id : " + nodeList.get(count).nodeId + " has been assigned Map Method and split input data for Job Id : " + this.jobId);
+							Files.deleteIfExists(Paths.get("inputnode" + this.jobId + nodeList.get(count).nodeId));
 						} catch (FileNotFoundException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -435,7 +486,7 @@ public class Server implements Runnable {
 					else {
 						try {
 							
-							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath().toString() );
+							PrintWriter outputLine = new PrintWriter(Paths.get("inputnode" + this.jobId + nodeList.get(count).nodeId).toAbsolutePath().toString() );
 							while (linesCounter < linesPerNode) {									
 								if ( (inputLine = bufferReader.readLine()) != null ) {
 								
@@ -457,8 +508,9 @@ public class Server implements Runnable {
 						    channel.queueDeclare(nodeList.get(count).queueFromServer, false, false, false, null);
 						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, message.getBytes());
 						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("map" + this.jobId).toAbsolutePath()));
-						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + nodeList.get(count).nodeId).toAbsolutePath()));							
-							
+						    channel.basicPublish("", nodeList.get(count).queueFromServer, null, Files.readAllBytes(Paths.get("inputnode" + this.jobId + nodeList.get(count).nodeId).toAbsolutePath()));							
+						    System.out.println("Node id : " + nodeList.get(count).nodeId + " has been assigned Map Method and split input data for Job Id : " + this.jobId);
+						    Files.deleteIfExists(Paths.get("inputnode" + this.jobId + nodeList.get(count).nodeId));
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -468,24 +520,44 @@ public class Server implements Runnable {
 			}
 		}
 	}
-	
+	/**
+	 * 
+	 * @param connection
+	 * @param channel
+	 */
 	public void reduceOutput( Connection connection, Channel channel ) {
 		while(true) {
 			int counterNode = 0;
+			int counterFreeNode = 0;
+			
 			for(int i = 0; i < nodeList.size(); i++ ) {
-				if(nodeList.get(i).isFree) {
+				if(nodeList.get(i).jobId.equals(this.jobId)) {
 					counterNode++;	
-				}				
+				}
+				if(nodeList.get(i).isFree) {
+					counterFreeNode++;
+				}
 			}
 			
-			if (counterNode == nodeList.size() && resultsList.size() == 1) {
+			int counterResult = 0;
+			for(int i = 0; i < resultsList.size(); i++ ) {
+				if(resultsList.get(i).jobId.equals(this.jobId)) {
+					counterResult++;
+				}
+			}
+			
+			if (counterNode == 0 && counterResult == 1) {
 				String message = "result";
 			    try {
 					channel.queueDeclare(this.queueFromServer, false, false, false, null);
 				    channel.basicPublish("", this.queueFromServer, null, message.getBytes());
 				    channel.basicPublish("", this.queueFromServer, null, resultsList.get(0).result);
-				    System.out.println("here");
+				    //System.out.println("here");
 				    resultsList.remove(0);
+				    System.out.println("Job has been completed and output file has been sent to Assigner for Job Id : " + this.jobId);
+				    Files.deleteIfExists(Paths.get("map" + this.jobId));
+				    Files.deleteIfExists(Paths.get("reduce" + this.jobId));
+				    Files.deleteIfExists(Paths.get("input" + this.jobId));
 				    break;
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
@@ -494,8 +566,8 @@ public class Server implements Runnable {
 			}
 			
 			else {
-				if (counterNode > 0 && resultsList.size() > 1) {
-					System.out.println("coming for reduce");
+				if (counterFreeNode > 0 && counterResult > 1) {
+					//System.out.println("coming for reduce");
 					Result firstResult = resultsList.get(0);
 					Result secondResult = resultsList.get(1);
 					
@@ -509,7 +581,8 @@ public class Server implements Runnable {
 							    channel.basicPublish("", nodeList.get(i).queueFromServer, null, firstResult.result);
 							    channel.basicPublish("", nodeList.get(i).queueFromServer, null, secondResult.result);
 							    nodeList.get(i).isFree = false;
-							    System.out.println("node " + i + " getting reduce");
+							    nodeList.get(i).jobId = this.jobId;
+							    System.out.println("Node id : " + nodeList.get(i).nodeId + " has been assigned Reduce Method and 2 input data for Job Id : " + this.jobId);
 							} catch (IOException e) {
 								// TODO Auto-generated catch block
 								e.printStackTrace();
@@ -544,7 +617,7 @@ public class Server implements Runnable {
 	}
 	
 	public static void deleteNode(Node thisNode) {
+		System.out.println("Removing node with Node Id : " + thisNode.nodeId);
 		Server.nodeList.remove(thisNode);
-		System.out.println("node deleted");
 	}
 }

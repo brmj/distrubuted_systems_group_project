@@ -16,11 +16,12 @@ import com.rabbitmq.client.ConsumerCancelledException;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.ShutdownSignalException;
 
-
+/**
+ * 
+ * @author Ben, Bhakti, and Vinayak
+ *
+ */
 public class Node implements Runnable {
-	//implement similar communication mechanism as that of assigner
-	//implement 'node polling server' for failure handling
-	//keep placeholder for map and reduce functions
 	
 	String queueFromNode;
 	String queueFromServer;
@@ -34,7 +35,11 @@ public class Node implements Runnable {
 	Path firstInputPath;
 	Path secondInputPath;
 	Path reduceOutputPath;
-	
+
+	/**
+	 * 
+	 * @param ipAddress
+	 */
 	Node(String ipAddress) {
 		//ip address of rabbitmq server
 		this.ipAddressRabbitMqServer = ipAddress;
@@ -63,7 +68,10 @@ public class Node implements Runnable {
 		reduceOutputPath = Paths.get("reduceOutput.dat");
 			
 	}
-	
+	/**
+	 * 
+	 * @param args
+	 */
 	public static void main (String[] args) {
 		Node myNode = new Node(args[0]);
 		//System.out.println("connecting on "+myObject.ipAddressRabbitMqServer);
@@ -79,7 +87,7 @@ public class Node implements Runnable {
 
 		    channel.queueDeclare(myNode.initialConnectionQueue, false, false, false, null);
 		    channel.basicPublish("", myNode.initialConnectionQueue, null, myNode.nodeId.getBytes());
-		    System.out.println(myNode.nodeId);
+		    System.out.println("Establishing identity with Node Id : " + myNode.nodeId);
 		    channel.close();
 		    connection.close();
 		} catch (IOException e) {
@@ -132,7 +140,9 @@ public class Node implements Runnable {
 			}	    	
 	    }
 	}
-	
+	/**
+	 * listen messages from server
+	 */
 	public void listenFromServer() {
 		
 		ConnectionFactory factory = new ConnectionFactory();
@@ -178,8 +188,9 @@ public class Node implements Runnable {
 				QueueingConsumer.Delivery delivery = consumer.nextDelivery();
 				
 				String message = new String(delivery.getBody());
-				System.out.println(message);
+				
 				if(message.equals("map")) {
+					System.out.println("Receiving Map method from Server");
 					FileOutputStream outputFile = new FileOutputStream(this.mapPath.toAbsolutePath().toString());				
 					try {
 						delivery = consumer.nextDelivery();
@@ -189,7 +200,9 @@ public class Node implements Runnable {
 						e.printStackTrace();
 					}
 					outputFile.close();
+					System.out.println("Map Method has been received from Server");
 					
+					System.out.println("Receiving input data from Server");
 					outputFile = new FileOutputStream(this.inputPath.toAbsolutePath().toString());				
 					try {
 						delivery = consumer.nextDelivery();
@@ -199,7 +212,9 @@ public class Node implements Runnable {
 						e.printStackTrace();
 					}
 					outputFile.close();
+					System.out.println("Received input data from Server");
 					
+					System.out.println("Executing Map Method ..");
 					//code from Ben's PythonTest
 					PythonInterpreter interpreter = new PythonInterpreter();
 					
@@ -216,7 +231,8 @@ public class Node implements Runnable {
 				    message = "result";
 				    channel1.basicPublish("", this.queueFromNode, null, message.getBytes());
 				    channel1.basicPublish("", this.queueFromNode, null, Files.readAllBytes(this.mapOutputPath));
-					
+					System.out.println("Map method execution has finished. Sent output to Server");
+				    
 				    //cleanup files
 				    Files.deleteIfExists(this.mapPath);
 				    Files.deleteIfExists(this.mapOutputPath);
@@ -224,7 +240,7 @@ public class Node implements Runnable {
 				}
 				
 				else if (message.equals("reduce")) {
-					System.out.println("in reduce");
+					System.out.println("Receiving Reduce Method from Server");
 					FileOutputStream outputFile = new FileOutputStream(this.reducePath.toAbsolutePath().toString());				
 					try {
 						delivery = consumer.nextDelivery();
@@ -234,7 +250,9 @@ public class Node implements Runnable {
 						e.printStackTrace();
 					}
 					outputFile.close();
+					System.out.println("Reduce method has been received from Server");
 					
+					System.out.println("Receiving input data from Server");
 					outputFile = new FileOutputStream(this.firstInputPath.toAbsolutePath().toString());				
 					try {
 						delivery = consumer.nextDelivery();
@@ -254,7 +272,9 @@ public class Node implements Runnable {
 						e.printStackTrace();
 					}
 					outputFile.close();
+					System.out.println("Input data has been received from Server");
 					
+					System.out.println("Executing Reduce Method ...");
 					//code from Ben's PythonTest
 					PythonInterpreter interpreter = new PythonInterpreter();
 					
@@ -274,7 +294,8 @@ public class Node implements Runnable {
 				    message = "result";
 				    channel.basicPublish("", this.queueFromNode, null, message.getBytes());
 				    channel.basicPublish("", this.queueFromNode, null, Files.readAllBytes(this.reduceOutputPath));
-					
+					System.out.println("Reduce method execution has finished. Sent output to Server");
+				    
 				    //cleanup files
 				    Files.deleteIfExists(this.reducePath);
 				    Files.deleteIfExists(this.firstInputPath);
